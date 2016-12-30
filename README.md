@@ -8,6 +8,15 @@ diffrelo is a tool to find the file differences between the remote server and th
 go get github.com/kenzo0107/diffrelo
 ```
 
+or
+
+```
+## at Linux
+curl -slO https://github.com/kenzo0107/diffrelo/releases/download/v0.0.1/diffrelo-v0.0.1-linux-amd64.zip
+unzip diffrelo-v0.0.1-linux-amd64.zip
+mv diffrelo-v0.0.1-linux-amd64 /usr/local/bin/diffrelo
+```
+
 ## Useage
 
 ```
