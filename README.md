@@ -46,16 +46,36 @@ Usage of diffrelo:
 $ diffrelo -t web1 -r /var/www/html -l /Users/kenzo/workspace
 ```
 
-Target only specific extensions. Use `-ext` option.
+- Target only specific extensions. Use `-ext` option.
 
 ```
 $ diffrelo -t web1 -r /var/www/html -l /Users/kenzo/workspace -ext php,js
 ```
 
-Exclude only certain extensions. Use `-vext` option.
+- Exclude only certain extensions. Use `-vext` option.
 
 ```
 $ diffrelo -t web1 -r /var/www/html -l /Users/kenzo/workspace -vext tar.gz,zip,tar.bz
+```
+
+- Output to file
+
+```
+$ diffrelo -t web1 -r /var/www/html -l /Users/kenzo/workspace -out list.txt
+```
+
+- Enumerated files only
+
+```
+$ diffrelo -t web1 -r /var/www/html -l /Users/kenzo/workspace -in list.txt
+```
+
+```
+$ cat list.txt
+
+html/static/css/common.css
+html/static/js/sns.login.js
+html/controller/login_controller.php
 ```
 
 ## To Do
