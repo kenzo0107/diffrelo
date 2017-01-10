@@ -2,6 +2,8 @@
 
 diffrelo is a tool to find the file differences between the remote server and the local workspace.
 
+![Imgur](http://i.imgur.com/4tGwrRf.png)
+
 ## Installation
 
 ```
@@ -55,3 +57,8 @@ Exclude only certain extensions. Use `-vext` option.
 ```
 $ diffrelo -t web1 -r /var/www/html -l /Users/kenzo/workspace -vext tar.gz,zip,tar.bz
 ```
+
+## To Do
+
+- Test in Windows OS.
+- Performance improve with very large file (>= 10 MBytes)

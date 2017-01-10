@@ -25,4 +25,8 @@ _testmain.go
 
 pkg/*
 diffrelo
+remoteDir
+localDir
+*.txt
+*.zip
 *~
