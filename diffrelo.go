@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pkg/sftp"
 	"github.com/udhos/equalfile"
@@ -24,7 +25,7 @@ const (
 	remoteDir        = "remoteDir"
 	localDir         = "localDir"
 	stdSeparator     = "/"
-	semaphoreDefault = 5
+	semaphoreDefault = 4
 )
 
 type strslice []string
@@ -40,12 +41,15 @@ func (s *strslice) Set(v string) error {
 
 func main() {
 
+	start := time.Now()
+
 	// number of CPU Core.
 	cpus := runtime.NumCPU()
 	runtime.GOMAXPROCS(cpus)
 
 	var exts strslice
 	var vexts strslice
+	var vdirs strslice
 	var target string
 	var showVersion bool
 	var localWorkspace string
@@ -53,27 +57,37 @@ func main() {
 	var semaphoreCount int
 	var input string
 	var output string
+	var skipTrailingCr bool
 
 	flag.Var(&exts, "ext", "include file extension. default: php,tpl,js,css,html")
 	flag.Var(&vexts, "vext", "exclude file extension. default: tpl.php,sql,tar.gz")
+	flag.Var(&vdirs, "vdirs", "exclude directory extension. default: data/Smarty/templates_c")
 	flag.StringVar(&target, "t", "", "target hostname")
 	flag.StringVar(&remoteWorkspace, "r", "/var/www/html", "workspace in remote server")
 	flag.StringVar(&localWorkspace, "l", "/Users/kenzo/go/src/github.com", "local workspace")
 	flag.IntVar(&semaphoreCount, "sem", semaphoreDefault, "semaphore limit count for goroutine")
 	flag.StringVar(&input, "in", "", "input file")
 	flag.StringVar(&output, "out", "list.txt", "output file")
+	flag.BoolVar(&skipTrailingCr, "skipcr", false, "show version")
 
 	flag.BoolVar(&showVersion, "v", false, "show version")
 	flag.Parse()
+
+	if showVersion {
+		fmt.Println("version:", version)
+		return
+	}
 
 	if len(target) == 0 {
 		err := errors.New("[error] You don't set target hostname ? Please set '-t' target hostname")
 		log.Fatal(err)
 	}
 
-	if showVersion {
-		fmt.Println("version:", version)
-		return
+	if skipTrailingCr {
+		if err := existCommand("diff"); err != nil {
+			fmt.Println("command `diff` not found.")
+			return
+		}
 	}
 
 	// set exts default values.
@@ -90,6 +104,18 @@ func main() {
 		vexts = append(vexts, "sql")
 		vexts = append(vexts, "gz")
 		vexts = append(vexts, "zip")
+	}
+
+	if len(vdirs) == 0 {
+		vdirs = append(vdirs, "data/Smarty/templates_c")
+		vdirs = append(vdirs, "data/class/api/operations")
+		vdirs = append(vdirs, "data/class/api")
+		vdirs = append(vdirs, "data/class_extends/api_extends")
+		vdirs = append(vdirs, "data/downloads")
+		vdirs = append(vdirs, "data/download")
+		vdirs = append(vdirs, "data/module")
+		vdirs = append(vdirs, "data/plugin")
+		vdirs = append(vdirs, "data/smarty_extends")
 	}
 
 	cwd, err := os.Getwd()
@@ -132,7 +158,7 @@ func main() {
 	if len(input) > 0 {
 		lines = getLinesFromFile(input)
 	} else {
-		lines = getLocalFilepathList(localWorkspace, exts, vexts)
+		lines = getLocalFilepathList(localWorkspace, exts, vexts, vdirs)
 	}
 
 	isMerge := true
@@ -145,6 +171,8 @@ func main() {
 		writer = bufio.NewWriter(f)
 	}
 
+	cmp := equalfile.New(nil, equalfile.Options{})
+
 	// semaphore for concurrency goroutine limit.
 	sem := make(chan struct{}, semaphoreCount)
 	var wg sync.WaitGroup
@@ -156,16 +184,25 @@ func main() {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
+			var equal bool
+
 			splitpath := strings.Split(l, stdSeparator)
 
 			localDst, localErr := setOneLocalFile(localWorkspace, splitpath)
 
 			remoteDst, remoteErr := setOneRemoteFile(client, remoteWorkspace, splitpath)
 
+			err = nil
+
 			// Get difference between localfile and remotefile.
 			if localErr == nil && remoteErr == nil {
-				cmp := equalfile.New(nil, equalfile.Options{})
-				equal, err := cmp.CompareFile(localDst, remoteDst)
+				equal = false
+				if skipTrailingCr {
+					equal, err = isEqual(localDst, remoteDst)
+				} else {
+					equal, err = cmp.CompareFile(localDst, remoteDst)
+				}
+
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "[error] %v - %s\n", err, l)
 				}
@@ -209,6 +246,9 @@ func main() {
 	if isMerge {
 		fmt.Fprintln(os.Stdout, "[All files have merged] (^-^)/Bye")
 	}
+
+	elapsed := time.Since(start)
+	fmt.Printf("Executed: %f sec \n", elapsed.Seconds())
 }
 
 // initialize ... Clean up remoteDir, localDir.
@@ -237,7 +277,7 @@ func initialize(cwd string) {
 }
 
 // getLocalFilepathList ... Get local file path by setting root.
-func getLocalFilepathList(root string, exts, vexts []string) (files []string) {
+func getLocalFilepathList(root string, exts, vexts, vdirs []string) (files []string) {
 
 	if len(exts) > 0 {
 		exts = addDot2PrefixInStringArray(exts)
@@ -256,8 +296,15 @@ func getLocalFilepathList(root string, exts, vexts []string) (files []string) {
 
 			isIncludeFile := true
 
-			rel, err := filepath.Rel(root, path)
+			rel, _ := filepath.Rel(root, path)
+
 			ext := filepath.Ext(rel)
+
+			// var dir = filepath.Dir(path)
+			// var relPath = dir[len(root)+1:]
+			// if isExist, _ := inStringContainArray(relPath, vdirs); isExist {
+			// 	isIncludeFile = false
+			// }
 
 			if len(exts) > 0 {
 				if isExist, _ := inStringArray(ext, exts); !isExist {
@@ -449,6 +496,21 @@ func inStringArray(val string, array []string) (isExist bool, index int) {
 	return
 }
 
+func inStringContainArray(val string, array []string) (isExist bool, index int) {
+	isExist = false
+	index = -1
+
+	for i, v := range array {
+		if x := strings.Index(v, val); x != index {
+			index = i
+			isExist = true
+			log.Println("(^-^)", val)
+			return
+		}
+	}
+	return
+}
+
 // addDot2Prefix ... Add dot "." to prefix.
 func addDot2PrefixInStringArray(s []string) (t []string) {
 	for _, x := range s {
@@ -465,4 +527,30 @@ func newFile(fn string) *os.File {
 		log.Fatal(err)
 	}
 	return fp
+}
+
+func existCommand(cmd string) (e error) {
+	c := fmt.Sprintf("which %s", cmd)
+	e = exec.Command("sh", "-c", c).Run()
+	return e
+}
+
+func isEqual(f1, f2 string) (b bool, e error) {
+
+	b = false
+
+	c := fmt.Sprintf("diff --strip-trailing-cr -r %s %s | wc -l | awk '{if($1!=0) print 'diff'}'", f1, f2)
+
+	var o []byte
+	o, e = exec.Command("sh", "-c", c).Output()
+	if e != nil {
+		return
+	}
+
+	if len(o) == 0 {
+		b = true
+		return
+	}
+
+	return
 }
