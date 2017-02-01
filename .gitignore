@@ -28,5 +28,6 @@ diffrelo
 remoteDir
 localDir
 *.txt
+list.*
 *.zip
 *~
