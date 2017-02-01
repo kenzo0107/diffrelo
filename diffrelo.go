@@ -68,7 +68,7 @@ func main() {
 	flag.IntVar(&semaphoreCount, "sem", semaphoreDefault, "semaphore limit count for goroutine")
 	flag.StringVar(&input, "in", "", "input file")
 	flag.StringVar(&output, "out", "list.txt", "output file")
-	flag.BoolVar(&skipTrailingCr, "skipcr", false, "show version")
+	flag.BoolVar(&skipTrailingCr, "skipeol", false, "ignore end of line")
 
 	flag.BoolVar(&showVersion, "v", false, "show version")
 	flag.Parse()
@@ -192,11 +192,10 @@ func main() {
 
 			remoteDst, remoteErr := setOneRemoteFile(client, remoteWorkspace, splitpath)
 
-			err = nil
-
 			// Get difference between localfile and remotefile.
 			if localErr == nil && remoteErr == nil {
 				equal = false
+				err = nil
 				if skipTrailingCr {
 					equal, err = isEqual(localDst, remoteDst)
 				} else {
@@ -360,12 +359,8 @@ func setOneRemoteFile(client *sftp.Client, remoteWorkspace string, splitpath []s
 	remoteSrc := getPath(remoteWorkspace, splitpath)
 	remoteDst = getPath(remoteDir, splitpath)
 
-	// fmt.Printf("[remoteSrc]: %v\n", remoteSrc)
-	// fmt.Printf("[remoteDst]: %v\n", remoteDst)
-
 	_, err = client.Stat(remoteSrc)
 	if err != nil {
-		// fmt.Fprintf(os.Stderr, "[error] %v - %s\n", err, remoteSrc)
 		return remoteDst, err
 	}
 
@@ -407,88 +402,85 @@ func getPath(workspace string, splitpath []string) string {
 }
 
 // reMakeDir ... Make a directory when it doesn't exist.
-func reMakeDir(dir string) error {
+func reMakeDir(dir string) (e error) {
 
-	if err := os.RemoveAll(dir); err != nil {
-		fmt.Fprintln(os.Stderr, "[error]", err)
-		return err
+	if e = os.RemoveAll(dir); e != nil {
+		fmt.Fprintln(os.Stderr, "[error]", e)
+		return
 	}
 
-	err := os.MkdirAll(dir, 0755)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "[error]", err)
-		return err
+	e = os.MkdirAll(dir, 0755)
+	if e != nil {
+		fmt.Fprintln(os.Stderr, "[error]", e)
+		return
 	}
-	return err
+	return
 }
 
 // exists ... Check wether a file exists.
-func exists(filename string) bool {
-	_, err := os.Stat(filename)
-	return err == nil
+func exists(f string) bool {
+	_, e := os.Stat(f)
+	return e == nil
 }
 
 // getLinesFromFile ... Get lines from a text file.
-func getLinesFromFile(filePath string) []string {
+func getLinesFromFile(path string) []string {
 	// open file.
-	f, err := os.Open(filePath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "File %s could not read: %v\n", filePath, err)
+	f, e := os.Open(path)
+	if e != nil {
+		fmt.Fprintf(os.Stderr, "File %s could not read: %v\n", path, e)
 		os.Exit(1)
 	}
 	defer f.Close()
 
-	// read lines by scanner
-	// lines := []string{}
-	lines := make([]string, 0, 100) // ある程度行数が事前に見積もれるようであれば、makeで初期capacityを指定して予めメモリを確保しておくことが望ましい
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		// appendで追加
-		lines = append(lines, scanner.Text())
+	l := make([]string, 0, 100)
+	s := bufio.NewScanner(f)
+	for s.Scan() {
+		l = append(l, s.Text())
 	}
-	if serr := scanner.Err(); serr != nil {
-		fmt.Fprintf(os.Stderr, "File %s scan error: %v\n", filePath, err)
+	if se := s.Err(); se != nil {
+		fmt.Fprintf(os.Stderr, "File %s scan error: %v\n", path, e)
 	}
 
-	return lines
+	return l
 }
 
 // copy ... Copy src to dst.
-func copy(dst, src string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
+func copy(dst, src string) (e error) {
+	i, e := os.Open(src)
+	if e != nil {
+		return
 	}
-	defer in.Close()
+	defer i.Close()
 
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
+	o, e := os.Create(dst)
+	if e != nil {
+		return
 	}
-	defer out.Close()
+	defer o.Close()
 
-	_, err = io.Copy(out, in)
-	if err != nil {
-		return err
+	_, e = io.Copy(o, i)
+	if e != nil {
+		return
 	}
 
-	err = out.Sync()
-	if err != nil {
-		return err
+	e = o.Sync()
+	if e != nil {
+		return
 	}
-	return err
+	return
 }
 
 // inStringArray ... Return true, index >= 0 if specific string value is in string array, Else false, index = -1.
-func inStringArray(val string, array []string) (isExist bool, index int) {
+func inStringArray(v string, arr []string) (b bool, i int) {
 
-	isExist = false
-	index = -1
+	b = false
+	i = -1
 
-	for i, v := range array {
-		if val == v {
-			index = i
-			isExist = true
+	for k, s := range arr {
+		if v == s {
+			i = k
+			b = true
 			return
 		}
 	}
@@ -496,15 +488,15 @@ func inStringArray(val string, array []string) (isExist bool, index int) {
 	return
 }
 
-func inStringContainArray(val string, array []string) (isExist bool, index int) {
-	isExist = false
-	index = -1
+func inStringContainArray(v string, arr []string) (b bool, i int) {
 
-	for i, v := range array {
-		if x := strings.Index(v, val); x != index {
-			index = i
-			isExist = true
-			log.Println("(^-^)", val)
+	b = false
+	i = -1
+
+	for k, s := range arr {
+		if x := strings.Index(s, v); x != i {
+			i = k
+			b = true
 			return
 		}
 	}
@@ -532,7 +524,7 @@ func newFile(fn string) *os.File {
 func existCommand(cmd string) (e error) {
 	c := fmt.Sprintf("which %s", cmd)
 	e = exec.Command("sh", "-c", c).Run()
-	return e
+	return
 }
 
 func isEqual(f1, f2 string) (b bool, e error) {
