@@ -78,6 +78,12 @@ html/static/js/sns.login.js
 html/controller/login_controller.php
 ```
 
+- ignore end of line
+
+```
+$ diffrelo -t web1 -r /var/www/html -l /Users/kenzo/workspace -in list.txt --skipeol
+```
+
 ## To Do
 
 - Test in Windows OS.
